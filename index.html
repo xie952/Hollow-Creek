@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#070906" />
+<title>林间暮色 · Hollow Creek</title>
+<meta name="description" content="一间秋日森林里的木屋，实时 3D 交互场景。" />
+<style>
+  :root {
+    --ink: #070906;
+    --ivory: #f1e8d6;
+    --muted: rgba(228, 218, 199, 0.64);
+    --faint: rgba(228, 218, 199, 0.38);
+    --line: rgba(235, 223, 201, 0.16);
+    --amber: #d8ad76;
+    --serif: "Palatino Linotype", "Book Antiqua", Palatino, "Songti SC", "Noto Serif SC", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--ink);
+    color: var(--ivory);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body { cursor: default; }
+  button { font: inherit; color: inherit; }
+  button:focus-visible { outline: 1px solid var(--amber); outline-offset: 4px; }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #070906;
+    cursor: grab;
+    touch-action: none;
+  }
+  #stage:active { cursor: grabbing; }
+  body.render-mode #stage { cursor: default; }
+
+  .letterbox {
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: 3.4vh;
+    background: #060705;
+    z-index: 12;
+    pointer-events: none;
+  }
+  .letterbox.top { top: 0; border-bottom: 1px solid rgba(255, 240, 215, 0.035); }
+  .letterbox.bottom { bottom: 0; border-top: 1px solid rgba(255, 240, 215, 0.035); }
+
+  .ui {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1.2s ease 0.2s;
+  }
+  body.is-ready .ui { opacity: 1; }
+  body.hide-ui .ui { opacity: 0; pointer-events: none; transition: opacity 0.45s ease; }
+  .ui button, .ui a { pointer-events: auto; }
+
+  .brand {
+    position: absolute;
+    top: calc(3.4vh + 28px);
+    left: clamp(20px, 3.1vw, 46px);
+    max-width: min(430px, 38vw);
+    text-shadow: 0 2px 26px rgba(0, 0, 0, 0.75);
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: rgba(225, 216, 199, 0.68);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .eyebrow .sep { color: rgba(225, 216, 199, 0.3); letter-spacing: 0; }
+  .live-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 9px rgba(216, 173, 118, 0.8);
+    animation: breathe 4.5s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+  .brand h1 {
+    margin: 14px 0 10px;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(30px, 3.4vw, 50px);
+    line-height: 1.04;
+    letter-spacing: 0.045em;
+    color: #f3ecdf;
+  }
+  .brand p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.9;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+  }
+
+  .telemetry {
+    position: absolute;
+    top: calc(3.4vh + 30px);
+    right: clamp(20px, 3.1vw, 46px);
+    text-align: right;
+    text-shadow: 0 2px 22px rgba(0, 0, 0, 0.8);
+  }
+  .telemetry .time {
+    font-family: var(--serif);
+    font-size: 30px;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    color: rgba(243, 235, 221, 0.9);
+  }
+  .telemetry .place {
+    margin-top: 9px;
+    font-size: 9px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgba(225, 216, 199, 0.48);
+  }
+  .telemetry .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 16px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: rgba(225, 216, 199, 0.5);
+  }
+  .telemetry .live::before {
+    content: "";
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: #b5c49d;
+    box-shadow: 0 0 7px rgba(181, 196, 157, 0.7);
+  }
+
+  .help {
+    position: absolute;
+    left: clamp(20px, 3.1vw, 46px);
+    bottom: calc(3.4vh + 24px);
+    font-size: 9px;
+    line-height: 1.8;
+    letter-spacing: 0.16em;
+    color: rgba(225, 216, 199, 0.42);
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+  }
+  .help .key {
+    display: inline-block;
+    min-width: 15px;
+    padding: 1px 4px;
+    margin: 0 2px;
+    border: 1px solid rgba(235, 223, 201, 0.18);
+    border-radius: 3px;
+    font-size: 8px;
+    letter-spacing: 0;
+    color: rgba(235, 223, 201, 0.54);
+    text-align: center;
+  }
+
+  .dock {
+    position: absolute;
+    left: 50%;
+    bottom: calc(3.4vh + 20px);
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    background: rgba(9, 11, 8, 0.52);
+    border: 1px solid rgba(239, 226, 201, 0.13);
+    border-radius: 999px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 245, 225, 0.05);
+    backdrop-filter: blur(16px) saturate(115%);
+    -webkit-backdrop-filter: blur(16px) saturate(115%);
+    white-space: nowrap;
+  }
+  .shot-nav { display: flex; align-items: center; gap: 2px; }
+  .shot-btn {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(233, 224, 207, 0.58);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: color 0.25s ease, background 0.25s ease;
+  }
+  .shot-btn .idx {
+    font-family: var(--serif);
+    font-size: 8px;
+    letter-spacing: 0.04em;
+    color: rgba(233, 224, 207, 0.28);
+    transition: color 0.25s ease;
+  }
+  .shot-btn:hover { color: #f3ead9; background: rgba(240, 228, 206, 0.06); }
+  .shot-btn.active { color: #f6eedf; background: rgba(236, 218, 186, 0.12); }
+  .shot-btn.active .idx { color: var(--amber); }
+
+  .dock-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 4px;
+    padding-left: 7px;
+    border-left: 1px solid rgba(239, 226, 201, 0.12);
+  }
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(233, 224, 207, 0.58);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: color 0.25s ease, background 0.25s ease;
+  }
+  .icon-btn:hover { color: #f5ecdc; background: rgba(240, 228, 206, 0.07); }
+  .icon-btn.active { color: #f5e6cb; background: rgba(216, 173, 118, 0.14); }
+  .icon-btn svg { width: 13px; height: 13px; opacity: 0.8; }
+  .icon-btn .word { display: inline-block; }
+
+  #return-btn {
+    position: fixed;
+    right: clamp(18px, 3vw, 42px);
+    bottom: calc(3.4vh + 22px);
+    z-index: 40;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(9, 11, 8, 0.66);
+    color: rgba(240, 230, 213, 0.72);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    cursor: pointer;
+    backdrop-filter: blur(14px);
+  }
+  body.hide-ui #return-btn { display: inline-flex; }
+  body.render-mode #return-btn { display: none !important; }
+  #return-btn:hover { color: #f5ecdc; border-color: rgba(239, 226, 201, 0.3); }
+
+  .loader {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(ellipse at 72% 58%, rgba(122, 89, 51, 0.2), transparent 48%),
+      radial-gradient(ellipse at 24% 18%, rgba(50, 67, 59, 0.35), transparent 55%),
+      #070906;
+    transition: opacity 1.15s ease, visibility 1.15s ease;
+  }
+  .loader::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(7, 9, 6, 0.2), transparent 35%, rgba(7, 9, 6, 0.38));
+    pointer-events: none;
+  }
+  .loader.done { opacity: 0; visibility: hidden; pointer-events: none; }
+  .loader-inner {
+    position: relative;
+    z-index: 1;
+    width: min(360px, 72vw);
+    text-align: center;
+  }
+  .load-eyebrow {
+    color: rgba(226, 214, 193, 0.4);
+    font-size: 8px;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .load-title {
+    font-family: var(--serif);
+    font-size: clamp(30px, 4.2vw, 48px);
+    letter-spacing: 0.16em;
+    line-height: 1;
+    color: #eee4d1;
+    margin-left: 0.16em;
+  }
+  .load-cn {
+    margin-top: 14px;
+    color: rgba(232, 220, 200, 0.62);
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 0.52em;
+    margin-left: 0.52em;
+  }
+  .load-sub {
+    margin-top: 48px;
+    min-height: 18px;
+    color: rgba(226, 214, 193, 0.42);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+  }
+  .load-track {
+    position: relative;
+    height: 1px;
+    margin-top: 15px;
+    background: rgba(226, 214, 193, 0.13);
+    overflow: hidden;
+  }
+  #load-bar {
+    display: block;
+    height: 100%;
+    width: 100%;
+    transform: scaleX(0);
+    transform-origin: left center;
+    background: linear-gradient(90deg, rgba(216, 173, 118, 0.4), #e0bb8c);
+    transition: transform 0.5s ease;
+  }
+  .load-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 11px;
+    color: rgba(226, 214, 193, 0.32);
+    font-size: 8px;
+    letter-spacing: 0.14em;
+  }
+  .load-meta span:first-child { max-width: 76%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loader.failed .load-sub { color: #d59a83; }
+  .loader.failed #load-bar { background: #b86b55; }
+  .load-footer {
+    position: absolute;
+    bottom: calc(3.4vh + 22px);
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(226, 214, 193, 0.18);
+    font-size: 8px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }
+
+  #error {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    z-index: 120;
+    max-width: min(720px, 90vw);
+    padding: 10px 16px;
+    border: 1px solid rgba(196, 104, 80, 0.4);
+    border-radius: 6px;
+    background: rgba(28, 12, 9, 0.94);
+    color: #e6b8a4;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    .brand { max-width: 62vw; }
+    .brand h1 { font-size: 32px; }
+    .telemetry { display: none; }
+    .help { display: none; }
+    .dock { bottom: calc(3.4vh + 14px); max-width: calc(100vw - 28px); overflow-x: auto; scrollbar-width: none; }
+    .dock::-webkit-scrollbar { display: none; }
+    .shot-btn { padding: 9px 10px; font-size: 10px; }
+    .shot-btn .idx { display: none; }
+    .icon-btn .word { display: none; }
+    .icon-btn { padding: 0 9px; }
+    .letterbox { height: 2.4vh; }
+    .brand { top: calc(2.4vh + 20px); left: 20px; }
+  }
+  @media (max-width: 560px) {
+    .brand p { display: none; }
+    .brand h1 { margin-top: 10px; font-size: 28px; }
+    .eyebrow { font-size: 8px; letter-spacing: 0.18em; }
+    .dock { gap: 0; padding: 5px; }
+    .dock-actions { padding-left: 5px; margin-left: 2px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="stage" aria-label="秋日森林中的木屋，可拖拽环视"></canvas>
+
+  <div class="letterbox top"></div>
+  <div class="letterbox bottom"></div>
+
+  <div class="ui" id="ui">
+    <header class="brand">
+      <div class="eyebrow"><span class="live-dot"></span> HOLLOW CREEK <span class="sep">/</span> 林间小屋</div>
+      <h1>林间暮色</h1>
+      <p>秋分后的第七个黄昏，炊烟比风更慢。<br />山毛榉与落叶松之间，还有一盏灯亮着。</p>
+    </header>
+
+    <div class="telemetry" aria-hidden="true">
+      <div class="time">18:42</div>
+      <div class="place">NORTH WOODS · LATE AUTUMN</div>
+      <div class="live">实时渲染 · 程序化森林</div>
+    </div>
+
+    <div class="help">
+      拖拽环视 · 滚轮缩放 · 双击归位<br />
+      <span class="key">1</span><span class="key">2</span><span class="key">3</span><span class="key">4</span> 切换机位
+      <span class="key">T</span> 电影运镜
+      <span class="key">H</span> 隐藏界面
+    </div>
+
+    <div class="dock">
+      <nav class="shot-nav" id="shot-nav" aria-label="相机机位"></nav>
+      <div class="dock-actions">
+        <button class="icon-btn" id="tour-btn" type="button" aria-label="开始电影运镜">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.3" stroke="currentColor"/><path d="M6.8 5.4 10.6 8l-3.8 2.6V5.4Z" fill="currentColor"/></svg>
+          <span class="word">电影运镜</span>
+        </button>
+        <button class="icon-btn" id="reset-btn" type="button" aria-label="重置视角" title="重置视角 R">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.2 7.2a5 5 0 1 1 1.2 4.4" stroke="currentColor" stroke-linecap="round"/><path d="M2.6 3.3v4h4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="full-btn" type="button" aria-label="全屏" title="全屏 F">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2.6H2.6V6M10 2.6h3.4V6M6 13.4H2.6V10M10 13.4h3.4V10" stroke="currentColor" stroke-linecap="round"/></svg>
+        </button>
+        <button class="icon-btn" id="hide-btn" type="button" aria-label="隐藏界面" title="隐藏界面 H">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.8 8s2.4-4.2 6.2-4.2S14.2 8 14.2 8s-2.4 4.2-6.2 4.2S1.8 8 1.8 8Z" stroke="currentColor"/><circle cx="8" cy="8" r="1.7" stroke="currentColor"/><path d="m2.5 2.5 11 11" stroke="currentColor" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <button id="return-btn" type="button" aria-label="显示界面">
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style="width:13px;height:13px"><path d="M1.8 8s2.4-4.2 6.2-4.2S14.2 8 14.2 8s-2.4 4.2-6.2 4.2S1.8 8 1.8 8Z" stroke="currentColor"/><circle cx="8" cy="8" r="1.7" stroke="currentColor"/></svg>
+    显示界面
+  </button>
+
+  <div id="error" role="alert" hidden></div>
+
+  <div class="loader" id="loader">
+    <div class="loader-inner">
+      <div class="load-eyebrow">A quiet place at dusk</div>
+      <div class="load-title">HOLLOW CREEK</div>
+      <div class="load-cn">林间小屋</div>
+      <div class="load-sub">正在唤醒林间暮色</div>
+      <div class="load-track"><span id="load-bar"></span></div>
+      <div class="load-meta"><span id="load-stage">准备场景</span><span id="load-pct">0%</span></div>
+    </div>
+    <div class="load-footer">Procedural forest · Real-time 3D</div>
+  </div>
+
+  <noscript><div style="position:fixed;inset:0;display:grid;place-items:center;background:#070906;color:#eee4d1;z-index:200">需要启用 JavaScript 才能进入林间。</div></noscript>
+  <script src="./bundle.js" defer></script>
+</body>
+</html>

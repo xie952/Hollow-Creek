@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# build & dev artifacts
+.cache/
+bundle/
+debug.log
+_probe_webgl.mjs
+
+# dev-only screenshots (README references the 5 published renders)
+shots/crop-*.png
+shots/dof-*.png
+shots/first-low.png
+shots/probe.png
+shots/file-url.png
+shots/render-ui.png
+shots/iso/
